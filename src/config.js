@@ -16,6 +16,7 @@ module.exports = {
   concurrency: Math.min(toInt(process.env.CONCURRENCY, 3), 10),
   cooldownSec: toInt(process.env.COOLDOWN_SECONDS, 20),
   cacheMinutes: toInt(process.env.CACHE_MINUTES, 30),
+  stickyDelaySec: toInt(process.env.STICKY_DELAY_SECONDS, 5),
   resultEphemeral: (process.env.RESULT_EPHEMERAL ?? 'false').toLowerCase() !== 'false',
 
   urls: {
