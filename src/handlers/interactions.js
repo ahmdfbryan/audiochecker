@@ -3,7 +3,7 @@ const config = require('../config');
 const { checkMany, parseIds } = require('../roblox/audioChecker');
 const { IDS, buildModal, buildHelp } = require('../ui/panel');
 const { setSticky, removeSticky } = require('../sticky');
-const { buildResults } = require('../ui/results');
+const { buildResults, extractOkIds, COPY_ID } = require('../ui/results');
 
 const cooldowns = new Map(); // userId -> timestamp boleh cek lagi
 const running = new Set(); // userId yang sedang dicek (anti double submit)
@@ -114,8 +114,8 @@ async function runCheck(interaction, rawText) {
     finished = true;
     await chain;
 
-    const { embeds, followUps } = buildResults(results, { user: interaction.user, skipped });
-    await interaction.editReply({ content: '', embeds });
+    const { embeds, components, followUps } = buildResults(results, { user: interaction.user, skipped });
+    await interaction.editReply({ content: '', embeds, components });
 
     // Detail lanjutan kalau daftarnya panjang
     for (const embed of followUps) {
@@ -137,6 +137,19 @@ async function runCheck(interaction, rawText) {
   }
 }
 
+/**
+ * Discord tidak punya tombol "copy ke clipboard", jadi tombol ini mengirim pesan
+ * (hanya terlihat oleh yang klik) berisi ID polos, satu per baris.
+ * HP: tekan lama pesan -> Salin Teks. PC: blok teks lalu Ctrl+C.
+ */
+async function sendCopyIds(interaction) {
+  const ids = extractOkIds(interaction.message);
+  if (!ids.length) {
+    return interaction.reply({ ...EPHEMERAL, content: 'ℹ️ Tidak ada ID yang bisa disalin dari hasil ini.' });
+  }
+  return interaction.reply({ ...EPHEMERAL, content: ids.join('\n').slice(0, 2000) });
+}
+
 async function handleInteraction(interaction) {
   try {
     if (interaction.isChatInputCommand()) {
@@ -151,6 +164,7 @@ async function handleInteraction(interaction) {
     if (interaction.isButton()) {
       if (interaction.customId === IDS.OPEN) return await interaction.showModal(buildModal());
       if (interaction.customId === IDS.HELP) return await interaction.reply({ ...EPHEMERAL, ...buildHelp() });
+      if (interaction.customId === COPY_ID) return await sendCopyIds(interaction);
       return;
     }
 
