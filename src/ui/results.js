@@ -1,13 +1,15 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../config');
 const { STATUS } = require('../roblox/audioChecker');
 
 const GROUPS = [
-  { key: 'ok', title: 'Bisa diputar di semua map', emoji: '✅', statuses: [STATUS.PUBLIC] },
+  { key: 'ok', title: '📋 ID yang bisa dipakai', emoji: '✅', statuses: [STATUS.PUBLIC] },
   { key: 'private', title: 'Private (hanya di game pemilik)', emoji: '🔒', statuses: [STATUS.PRIVATE] },
   { key: 'bad', title: 'Tidak bisa dipakai', emoji: '❌', statuses: [STATUS.NOT_AUDIO, STATUS.NOT_FOUND] },
   { key: 'err', title: 'Gagal dicek (coba lagi nanti)', emoji: '❔', statuses: [STATUS.ERROR] },
 ];
+
+const COPY_ID = 'audiochk:copy';
 
 const DETAIL_LIMIT = 3900; // batas aman deskripsi embed (maks 4096)
 const FIELD_LIMIT = 1000; // batas aman value field (maks 1024)
@@ -50,7 +52,7 @@ function chunkLines(lines, limit) {
  * Kalau daftarnya sangat panjang (melebihi batas Discord 6000 karakter / 25 field),
  * sisanya baru dikirim sebagai pesan lanjutan.
  *
- * @returns {{ embeds: EmbedBuilder[], followUps: EmbedBuilder[] }}
+ * @returns {{ embeds: EmbedBuilder[], components: ActionRowBuilder[], followUps: EmbedBuilder[] }}
  */
 function buildResults(results, { user, skipped = 0 } = {}) {
   const groups = Object.fromEntries(GROUPS.map((g) => [g.key, results.filter((r) => g.statuses.includes(r.status))]));
@@ -104,7 +106,24 @@ function buildResults(results, { user, skipped = 0 } = {}) {
   const restLines = detailFields.slice(i).map((f) => f.value);
   const followUps = chunkLines(restLines, DETAIL_LIMIT).map((text) => new EmbedBuilder().setColor(color).setDescription(text));
 
-  return { embeds: [embed], followUps };
+  const components = okCount ? [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(COPY_ID).setLabel('Salin ID').setEmoji('📋').setStyle(ButtonStyle.Primary),
+  )] : [];
+
+  return { embeds: [embed], components, followUps };
 }
 
-module.exports = { buildResults };
+/**
+ * Ambil ID yang bisa dipakai langsung dari embed hasil (baris berawalan ✅),
+ * jadi tombol tetap jalan walau bot sudah restart.
+ */
+function extractOkIds(message) {
+  const text = (message?.embeds || [])
+    .flatMap((e) => [e.description || '', ...(e.fields || []).map((f) => f.value)])
+    .join('\n');
+  const ids = [];
+  for (const m of text.matchAll(/^✅ `(\d+)`/gm)) ids.push(m[1]);
+  return [...new Set(ids)];
+}
+
+module.exports = { buildResults, extractOkIds, COPY_ID };
