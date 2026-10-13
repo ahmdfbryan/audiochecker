@@ -16,7 +16,7 @@ module.exports = {
   concurrency: Math.min(toInt(process.env.CONCURRENCY, 3), 10),
   cooldownSec: toInt(process.env.COOLDOWN_SECONDS, 20),
   cacheMinutes: toInt(process.env.CACHE_MINUTES, 30),
-  resultEphemeral: (process.env.RESULT_EPHEMERAL ?? 'true').toLowerCase() !== 'false',
+  resultEphemeral: (process.env.RESULT_EPHEMERAL ?? 'false').toLowerCase() !== 'false',
 
   urls: {
     economy: (process.env.ROBLOX_ECONOMY_BASE || 'https://economy.roblox.com').replace(/\/$/, ''),
