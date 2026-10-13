@@ -17,10 +17,28 @@ const FIELD_LIMIT = 1000; // batas aman value field (maks 1024)
 const truncate = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const clean = (s) => String(s || '').replace(/[`*_~|>]/g, '');
 
+const SHOW_GAMES = 2;
+
+/** Baris tambahan untuk audio private: perkiraan map tempat audio berfungsi. */
+function ownerGamesLine(r) {
+  const owner = `**${truncate(clean(r.creator || '?'), 30)}**${r.creatorType === 'Group' ? ' (grup)' : ''}`;
+  if (r.ownerGames === undefined) return '';
+  if (r.ownerGames === null) return `\n↳ Milik ${owner}, daftar map gagal diambil`;
+  if (!r.ownerGames.length) return `\n↳ Milik ${owner}, tidak punya map publik`;
+
+  const shown = r.ownerGames.slice(0, SHOW_GAMES).map((g) => {
+    const name = truncate(clean(g.name), 28);
+    return g.placeId ? `[${name}](https://www.roblox.com/games/${g.placeId})` : name;
+  });
+  const more = r.ownerGames.length > SHOW_GAMES ? ` +${r.ownerGames.length - SHOW_GAMES} lainnya` : '';
+  return `\n↳ Jalan di map milik ${owner}: ${shown.join(', ')}${more}`;
+}
+
 function lineFor(r, emoji) {
   const name = r.name ? ` · ${truncate(clean(r.name), 38)}` : '';
   const extra = [STATUS.PUBLIC, STATUS.PRIVATE].includes(r.status) ? '' : ` · _${clean(r.note)}_`;
-  return `${emoji} \`${r.id}\`${name}${extra}`;
+  const games = r.status === STATUS.PRIVATE ? ownerGamesLine(r) : '';
+  return `${emoji} \`${r.id}\`${name}${extra}${games}`;
 }
 
 /** Hitung karakter embed sesuai aturan Discord (title, description, fields, footer, author). */
