@@ -86,7 +86,7 @@ function buildResults(results, { user, skipped = 0 } = {}) {
     if (!list.length) continue;
     const chunks = chunkLines(list.map((r) => lineFor(r, g.emoji)), FIELD_LIMIT - g.title.length - 10);
     chunks.forEach((chunk, i) => {
-      detailFields.push({ name: '\u200b', value: i === 0 ? `## ${g.title}\n${chunk}` : chunk });
+      detailFields.push({ name: '\u200b', value: i === 0 ? `**${g.title}**\n${chunk}` : chunk });
     });
   }
 
