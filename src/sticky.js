@@ -49,7 +49,7 @@ async function deleteMessageSafe(channel, messageId) {
 /** Kirim panel baru dulu, baru hapus yang lama, supaya panel tidak pernah hilang. */
 async function postPanel(channel) {
   const oldId = state[channel.id]?.messageId;
-  const msg = await channel.send(buildPanel());
+  const msg = await channel.send(buildPanel(channel.guild));
   state[channel.id] = { guildId: channel.guildId, messageId: msg.id };
   save();
   await deleteMessageSafe(channel, oldId);
