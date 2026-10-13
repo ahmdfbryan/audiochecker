@@ -100,6 +100,7 @@ async function checkUncached(id) {
     name: (info.Name || 'Tanpa nama').trim(),
     creator: creator.Name || '?',
     creatorType: creator.CreatorType || null,
+    creatorId: creator.CreatorTargetId ?? creator.Id ?? null,
   };
 
   if (/\[\s*content deleted\s*\]/i.test(base.name)) {
@@ -153,7 +154,60 @@ async function checkMany(ids, onProgress) {
 
   const workers = Array.from({ length: Math.min(config.concurrency, ids.length) }, worker);
   await Promise.all(workers);
+  await attachOwnerGames(results);
   return results;
+}
+
+/* ------------------------------------------------------------------ */
+/* Game milik pembuat audio private (perkiraan map tempat audio jalan) */
+/* ------------------------------------------------------------------ */
+
+const gamesCache = new Map(); // "User:123" / "Group:456" -> { games, expires }
+const MAX_GAMES_FETCH = 50;
+
+async function fetchCreatorGames(type, id) {
+  const key = `${type}:${id}`;
+  const hit = gamesCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.games;
+
+  const qs = `accessFilter=Public&limit=${MAX_GAMES_FETCH}&sortOrder=Desc`;
+  const urls = type === 'Group'
+    ? [`${config.urls.games}/v2/groups/${id}/gamesV2?${qs}`, `${config.urls.games}/v2/groups/${id}/games?${qs}`]
+    : [`${config.urls.games}/v2/users/${id}/games?${qs}`];
+
+  for (const url of urls) {
+    const { status, body } = await request(url);
+    if (status === 200 && body && Array.isArray(body.data)) {
+      const games = body.data
+        .map((g) => ({ name: (g.name || 'Tanpa nama').trim(), placeId: g.rootPlace?.id ?? null, visits: Number(g.placeVisits) || 0 }))
+        .sort((a, b) => b.visits - a.visits);
+      gamesCache.set(key, { games, expires: Date.now() + config.cacheMinutes * 60_000 });
+      return games;
+    }
+  }
+  return null; // gagal ambil, tidak di-cache supaya dicoba lagi lain waktu
+}
+
+/** Tambahkan `ownerGames` ke setiap hasil PRIVATE (1 request per pembuat, bukan per audio). */
+async function attachOwnerGames(results) {
+  const privates = results.filter((r) => r && r.status === STATUS.PRIVATE && r.creatorId && r.creatorType);
+  const owners = [...new Map(privates.map((r) => [`${r.creatorType}:${r.creatorId}`, r])).values()];
+
+  let next = 0;
+  const found = new Map();
+  async function worker() {
+    while (next < owners.length) {
+      const r = owners[next++];
+      try {
+        found.set(`${r.creatorType}:${r.creatorId}`, await fetchCreatorGames(r.creatorType, r.creatorId));
+      } catch {
+        found.set(`${r.creatorType}:${r.creatorId}`, null);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(config.concurrency, owners.length) }, worker));
+
+  for (const r of privates) r.ownerGames = found.get(`${r.creatorType}:${r.creatorId}`) ?? null;
 }
 
 /** Ambil ID dari teks bebas: angka biasa, rbxassetid://123, link roblox.com/library/123/... */
@@ -166,6 +220,7 @@ function parseIds(text) {
 setInterval(() => {
   const now = Date.now();
   for (const [id, v] of cache) if (v.expires <= now) cache.delete(id);
+  for (const [k, v] of gamesCache) if (v.expires <= now) gamesCache.delete(k);
 }, 10 * 60_000).unref();
 
 module.exports = { STATUS, checkOne, checkMany, parseIds };
