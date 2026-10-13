@@ -4,7 +4,13 @@ const config = require('./config');
 const commands = [
   new SlashCommandBuilder()
     .setName('panel-audio')
-    .setDescription('Kirim panel Cek ID Boombox ke channel ini (admin)')
+    .setDescription('Kirim panel Cek ID Boombox ke channel ini, selalu sticky di paling bawah (admin)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false),
+
+  new SlashCommandBuilder()
+    .setName('panel-audio-stop')
+    .setDescription('Matikan panel sticky Cek ID Boombox di channel ini (admin)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false),
 
