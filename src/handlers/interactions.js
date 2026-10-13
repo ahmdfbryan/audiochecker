@@ -1,7 +1,8 @@
 const { MessageFlags, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
 const { checkMany, parseIds } = require('../roblox/audioChecker');
-const { IDS, buildPanel, buildModal, buildHelp } = require('../ui/panel');
+const { IDS, buildModal, buildHelp } = require('../ui/panel');
+const { setSticky, removeSticky } = require('../sticky');
 const { buildResults } = require('../ui/results');
 
 const cooldowns = new Map(); // userId -> timestamp boleh cek lagi
@@ -11,6 +12,22 @@ const EPHEMERAL = { flags: MessageFlags.Ephemeral };
 
 function isStaff(interaction) {
   return Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild));
+}
+
+/**
+ * 10062 = Unknown interaction (lewat 3 detik / sudah dijawab proses lain)
+ * 40060 = Interaction has already been acknowledged
+ * Dua-duanya bukan bug di kode ini. Biasanya ada 2 proses bot yang jalan dengan token yang sama.
+ */
+function isStaleInteraction(err) {
+  return err?.code === 10062 || err?.code === 40060;
+}
+
+function warnStale(where, interaction) {
+  console.warn(
+    `[${where}] interaksi ${interaction.id} sudah kedaluwarsa/dijawab proses lain. `
+    + 'Cek apakah bot jalan dobel: `pm2 list` dan `ps aux | grep node`.',
+  );
 }
 
 async function safeReply(interaction, payload) {
@@ -23,15 +40,28 @@ async function safeReply(interaction, payload) {
 }
 
 async function sendPanel(interaction) {
+  await interaction.deferReply(EPHEMERAL);
   try {
-    await interaction.channel.send(buildPanel());
-    await interaction.reply({ ...EPHEMERAL, content: '✅ Panel cek audio sudah dikirim ke channel ini.' });
+    await setSticky(interaction.channel);
+    await interaction.editReply({
+      content: '✅ Panel cek audio sudah dikirim dan **sticky aktif**: panel akan selalu pindah ke paling bawah channel ini.\nPakai `/panel-audio-stop` untuk mematikannya.',
+    });
   } catch (err) {
     console.error('[panel] gagal kirim:', err.message);
-    await safeReply(interaction, {
-      content: '❌ Gagal mengirim panel. Pastikan bot punya izin **View Channel**, **Send Messages**, dan **Embed Links** di channel ini.',
-    });
+    await interaction.editReply({
+      content: '❌ Gagal mengirim panel. Pastikan bot punya izin **View Channel**, **Send Messages**, **Embed Links**, dan **Read Message History** di channel ini.',
+    }).catch(() => {});
   }
+}
+
+async function stopPanel(interaction) {
+  await interaction.deferReply(EPHEMERAL);
+  const removed = await removeSticky(interaction.channel);
+  await interaction.editReply({
+    content: removed
+      ? '🛑 Sticky dimatikan dan panel di channel ini sudah dihapus.'
+      : 'ℹ️ Tidak ada panel sticky di channel ini.',
+  });
 }
 
 async function runCheck(interaction, rawText) {
@@ -84,14 +114,23 @@ async function runCheck(interaction, rawText) {
     finished = true;
     await chain;
 
-    const payload = buildResults(results, { user: interaction.user, skipped });
-    await interaction.editReply({ content: '', ...payload });
+    const { embeds, followUps } = buildResults(results, { user: interaction.user, skipped });
+    await interaction.editReply({ content: '', embeds });
+
+    // Detail lanjutan kalau daftarnya panjang
+    for (const embed of followUps) {
+      await interaction.followUp({
+        ...(config.resultEphemeral ? EPHEMERAL : {}),
+        embeds: [embed],
+      }).catch((err) => console.error('[check] followUp gagal:', err.message));
+    }
 
     cooldowns.set(userId, Date.now() + config.cooldownSec * 1000);
   } catch (err) {
+    if (isStaleInteraction(err)) return warnStale('check', interaction);
     console.error('[check] error:', err);
     try {
-      await interaction.editReply({ content: '❌ Terjadi kesalahan saat mengecek. Coba lagi beberapa saat lagi.', embeds: [], files: [] });
+      await interaction.editReply({ content: '❌ Terjadi kesalahan saat mengecek. Coba lagi beberapa saat lagi.', embeds: [] });
     } catch { /* abaikan */ }
   } finally {
     running.delete(userId);
@@ -102,6 +141,7 @@ async function handleInteraction(interaction) {
   try {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'panel-audio') return await sendPanel(interaction);
+      if (interaction.commandName === 'panel-audio-stop') return await stopPanel(interaction);
       if (interaction.commandName === 'cekaudio') {
         return await runCheck(interaction, interaction.options.getString('ids', true));
       }
@@ -118,6 +158,7 @@ async function handleInteraction(interaction) {
       return await runCheck(interaction, interaction.fields.getTextInputValue(IDS.INPUT));
     }
   } catch (err) {
+    if (isStaleInteraction(err)) return warnStale('interaction', interaction);
     console.error('[interaction] error:', err);
     await safeReply(interaction, { content: '❌ Terjadi kesalahan. Coba lagi.' });
   }
