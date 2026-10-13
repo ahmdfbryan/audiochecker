@@ -11,7 +11,10 @@ const IDS = Object.freeze({
   INPUT: 'audiochk:input',
 });
 
-function buildPanel() {
+/**
+ * @param {import('discord.js').Guild} [guild] dipakai untuk ikon server di footer
+ */
+function buildPanel(guild) {
   const embed = new EmbedBuilder()
     .setColor(config.colors.brand)
     .setTitle('🎵 Cek ID Boombox / Audio Roblox')
@@ -28,7 +31,13 @@ function buildPanel() {
       '🔒 **Private**: hanya bisa diputar di game milik pembuatnya',
       '❌ **Tidak bisa**: ID salah, bukan audio, atau sudah dihapus',
     ].join('\n'))
-    .setFooter({ text: 'KokoKrunch Studios • Audio Checker' });
+    // Discord otomatis menampilkan timestamp sebagai "Today at 10:45 AM" / "Yesterday at ..."
+    // di sebelah teks footer, sesuai zona waktu & bahasa masing-masing member.
+    .setFooter({
+      text: 'Made by KokoKrunch Studios',
+      iconURL: guild?.iconURL({ extension: 'png', size: 128 }) || undefined,
+    })
+    .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(IDS.OPEN).setLabel('Cek Audio').setEmoji('🎵').setStyle(ButtonStyle.Success),
