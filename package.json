@@ -1,0 +1,18 @@
+{
+  "name": "kokokrunch-audio-checker",
+  "version": "1.0.0",
+  "description": "Bot Discord untuk cek ID boombox/audio Roblox (public = bisa diputar di semua map), mendukung banyak ID sekaligus.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "test:check": "node scripts/test-check.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
