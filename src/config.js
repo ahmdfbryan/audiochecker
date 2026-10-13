@@ -21,6 +21,7 @@ module.exports = {
 
   urls: {
     economy: (process.env.ROBLOX_ECONOMY_BASE || 'https://economy.roblox.com').replace(/\/$/, ''),
+    games: (process.env.ROBLOX_GAMES_BASE || 'https://games.roblox.com').replace(/\/$/, ''),
     openCloud: (process.env.ROBLOX_OPENCLOUD_BASE || 'https://apis.roblox.com').replace(/\/$/, ''),
   },
 
