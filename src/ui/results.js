@@ -46,9 +46,11 @@ function chunkLines(lines, limit) {
 }
 
 /**
+ * Semua hasil dalam 1 embed: ringkasan di atas, lalu detail per kelompok sebagai field.
+ * Kalau daftarnya sangat panjang (melebihi batas Discord 6000 karakter / 25 field),
+ * sisanya baru dikirim sebagai pesan lanjutan.
+ *
  * @returns {{ embeds: EmbedBuilder[], followUps: EmbedBuilder[] }}
- *   embeds    -> dikirim di balasan utama (ringkasan + detail halaman 1)
- *   followUps -> detail lanjutan kalau daftarnya panjang (1 embed per pesan)
  */
 function buildResults(results, { user, skipped = 0 } = {}) {
   const groups = Object.fromEntries(GROUPS.map((g) => [g.key, results.filter((r) => g.statuses.includes(r.status))]));
@@ -58,7 +60,7 @@ function buildResults(results, { user, skipped = 0 } = {}) {
     : okCount === 0 ? config.colors.bad
       : config.colors.warn;
 
-  const summary = new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle('🎵 Hasil Cek Audio')
     .setDescription(`**${results.length}** ID dicek${user ? ` oleh ${user}` : ''}.`)
@@ -66,55 +68,43 @@ function buildResults(results, { user, skipped = 0 } = {}) {
       { name: '✅ Bisa', value: String(groups.ok.length), inline: true },
       { name: '🔒 Private', value: String(groups.private.length), inline: true },
       { name: '❌ Tidak bisa', value: String(groups.bad.length + groups.err.length), inline: true },
-    )
-    .setTimestamp();
-
-  // ID yang bisa dipakai, siap salin (dipecah jadi beberapa field kalau panjang)
-  if (groups.ok.length) {
-    const idChunks = chunkLines(groups.ok.map((r) => r.id), FIELD_LIMIT - 10);
-    idChunks.slice(0, 3).forEach((chunk, i) => {
-      summary.addFields({
-        name: i === 0 ? '📋 ID yang bisa dipakai (siap salin)' : '​',
-        value: `\`\`\`\n${chunk}\n\`\`\``,
-      });
-    });
-    if (idChunks.length > 3) {
-      summary.addFields({ name: '​', value: '_Daftar lengkap ada di bagian **Bisa diputar di semua map** di bawah._' });
-    }
-  }
+    );
 
   if (skipped > 0) {
-    summary.addFields({
+    embed.addFields({
       name: '⚠️ Sebagian dilewati',
       value: `Maksimal ${config.maxIds} ID per cek. **${skipped}** ID sisanya belum dicek, kirim lagi di pengecekan berikutnya.`,
     });
   }
 
-  // Detail per ID, dipecah per halaman
-  const lines = [];
+  // Detail per kelompok -> field (judul besar di baris pertama tiap kelompok)
+  const detailFields = [];
   for (const g of GROUPS) {
     const list = groups[g.key];
     if (!list.length) continue;
-    if (lines.length) lines.push('');
-    lines.push(`## ${g.title}`);
-    for (const r of list) lines.push(lineFor(r, g.emoji));
+    const chunks = chunkLines(list.map((r) => lineFor(r, g.emoji)), FIELD_LIMIT - g.title.length - 10);
+    chunks.forEach((chunk, i) => {
+      detailFields.push({ name: '\u200b', value: i === 0 ? `## ${g.title}\n${chunk}` : chunk });
+    });
   }
 
-  const pages = chunkLines(lines, DETAIL_LIMIT);
-  const detailEmbeds = pages.map((text, i) => {
-    const e = new EmbedBuilder().setColor(color).setDescription(text);
-    if (pages.length > 1) e.setFooter({ text: `Detail ${i + 1}/${pages.length}` });
-    return e;
-  });
+  // Masukkan field selama masih muat di 1 embed
+  const MAX_TOTAL = 5800;
+  let used = embedLength(embed);
+  let i = 0;
+  for (; i < detailFields.length; i++) {
+    const f = detailFields[i];
+    const size = f.name.length + f.value.length;
+    if ((embed.data.fields?.length || 0) >= 25 || used + size > MAX_TOTAL) break;
+    embed.addFields(f);
+    used += size;
+  }
 
-  // Discord membatasi total 6000 karakter untuk semua embed dalam satu pesan.
-  // Kalau ringkasan + detail pertama terlalu panjang, detail pertama ikut dikirim terpisah.
-  const fitsTogether = detailEmbeds.length
-    && embedLength(summary) + embedLength(detailEmbeds[0]) <= 5800;
+  // Sisa (jarang terjadi) -> pesan lanjutan
+  const restLines = detailFields.slice(i).map((f) => f.value);
+  const followUps = chunkLines(restLines, DETAIL_LIMIT).map((text) => new EmbedBuilder().setColor(color).setDescription(text));
 
-  return fitsTogether
-    ? { embeds: [summary, detailEmbeds[0]], followUps: detailEmbeds.slice(1) }
-    : { embeds: [summary], followUps: detailEmbeds };
+  return { embeds: [embed], followUps };
 }
 
 module.exports = { buildResults };
