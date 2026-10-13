@@ -18,9 +18,9 @@ const truncate = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const clean = (s) => String(s || '').replace(/[`*_~|>]/g, '');
 
 function lineFor(r, emoji) {
-  const name = r.name ? ` · ${truncate(clean(r.name), 38)}` : '';
+  const name = r.name ? truncate(clean(r.name), 45) : 'Tanpa nama';
   const extra = [STATUS.PUBLIC, STATUS.PRIVATE].includes(r.status) ? '' : ` · _${clean(r.note)}_`;
-  return `${emoji} \`${r.id}\`${name}${extra}`;
+  return `${emoji} ${name}${extra}\n\`\`\`${r.id}\`\`\``;
 }
 
 /** Hitung karakter embed sesuai aturan Discord (title, description, fields, footer, author). */
@@ -86,7 +86,7 @@ function buildResults(results, { user, skipped = 0 } = {}) {
     if (!list.length) continue;
     const chunks = chunkLines(list.map((r) => lineFor(r, g.emoji)), FIELD_LIMIT - g.title.length - 10);
     chunks.forEach((chunk, i) => {
-      detailFields.push({ name: '\u200b', value: i === 0 ? `## ${g.title}\n${chunk}` : chunk });
+      detailFields.push({ name: '\u200b', value: i === 0 ? `**${g.title}**\n${chunk}` : chunk });
     });
   }
 
@@ -122,7 +122,7 @@ function extractOkIds(message) {
     .flatMap((e) => [e.description || '', ...(e.fields || []).map((f) => f.value)])
     .join('\n');
   const ids = [];
-  for (const m of text.matchAll(/^✅ `(\d+)`/gm)) ids.push(m[1]);
+  for (const m of text.matchAll(/^✅ .*\n```(\d+)```/gm)) ids.push(m[1]);
   return [...new Set(ids)];
 }
 
